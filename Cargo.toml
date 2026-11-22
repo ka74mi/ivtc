@@ -1,0 +1,35 @@
+[workspace]
+members = [
+    "crates/ivtc-core",
+    "crates/ivtc-dmo",
+    "crates/ivtc-cli",
+    "crates/xtask",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "MIT"
+
+[workspace.dependencies]
+ivtc-core = { path = "crates/ivtc-core" }
+
+# #[implement] マクロの展開結果が `windows_core::` を直接参照するため、windows と同じ版を直接依存にする。
+windows-core = "=0.62.2"
+
+# windows-rs はマイナー更新でAPIが動くことがあるので exact pin。
+# 上げるときは `cargo xtask check` が通ることを確認してから。
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_Media_DxMediaObjects",
+] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"

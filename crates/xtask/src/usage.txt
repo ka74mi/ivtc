@@ -1,0 +1,9 @@
+usage: cargo xtask <command> [--release]
+
+  build        DLLをビルド
+  register     ビルドして regsvr32 で登録(管理者権限のシェルで)
+  unregister   登録解除
+  reinstall    解除 → ビルド → 登録
+  check        fmt --check / clippy -D warnings / test
+  trace-on [path|debug]  トレース出力先をレジストリに設定(管理者権限。省略時 %PUBLIC%\PlaybackIVTC\trace.log)
+  trace-off    トレースを無効化

@@ -1,0 +1,7 @@
+/target/
+.vs/
+*.log
+**/*.pdb
+**/*.ilk
+**/*.exp
+**/*.lib

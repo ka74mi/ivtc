@@ -1,0 +1,12 @@
+[package]
+name = "ivtc-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# ivtc-core はステージ2(解析ツール)で追加する
+
+[lints]
+workspace = true

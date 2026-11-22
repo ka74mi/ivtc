@@ -1,0 +1,10 @@
+[alias]
+xtask = "run --quiet --package xtask --"
+
+# 他プロセス(MPC-HC / GraphStudioNext)にロードされるDLLなので、
+# VC++ランタイムの再頒布パッケージに依存しないよう静的リンクにする。
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -1,0 +1,18 @@
+# Normalize text files to LF
+* text=auto eol=lf
+
+# MPEG transport streams and media test fixtures
+*.m2ts binary
+*.ts  binary
+
+# Windows build artifacts
+*.dll binary
+*.exe binary
+*.pdb binary
+*.obj binary
+*.lib binary
+*.exp binary
+*.ilk binary
+*.pch binary
+*.res binary
+*.tlb binary
