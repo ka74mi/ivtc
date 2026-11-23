@@ -1,5 +1,3 @@
-//! DMO_MEDIA_TYPE と ivtc-core の VideoInfo の橋渡し。
-
 use ivtc_core::video_info::{VideoInfo, VideoInfoKind};
 use windows::Win32::Foundation::E_POINTER;
 use windows::Win32::Media::DxMediaObjects::{
@@ -14,10 +12,8 @@ pub(crate) const MEDIASUBTYPE_NV12: GUID = GUID::from_u128(0x3231564e_0000_0010_
 const FORMAT_VIDEOINFO: GUID = GUID::from_u128(0x05589f80_c356_11ce_bf01_00aa0055595a);
 const FORMAT_VIDEOINFO2: GUID = GUID::from_u128(0xf72a76a0_eb0a_11d0_ace4_0000c0cc16ba);
 
-/// format blockの異常に大きい値を弾く上限。
 const MAX_FORMAT_BYTES: u32 = 64 * 1024;
 
-/// 検証済みのNV12メディアタイプ。format blockはVecに深くコピーして保持する。
 #[derive(Clone, PartialEq)]
 pub(crate) struct NegotiatedType {
     pub(crate) info: VideoInfo,
@@ -26,7 +22,7 @@ pub(crate) struct NegotiatedType {
 
 impl NegotiatedType {
     /// # Safety
-    /// `p` は null か、有効な DMO_MEDIA_TYPE を指すこと。
+    /// `p` は null か、有効な `DMO_MEDIA_TYPE` を指すこと。
     pub(crate) unsafe fn from_raw(p: *const DMO_MEDIA_TYPE) -> DmoResult<Self> {
         if p.is_null() {
             return Err(E_POINTER);
@@ -74,10 +70,8 @@ impl NegotiatedType {
         )
     }
 
-    /// 呼び出し側(wrapper)が MoFreeMediaType で解放できる形で書き出す。
-    ///
     /// # Safety
-    /// `dest` は書き込み可能な DMO_MEDIA_TYPE を指すこと。
+    /// `dest` は書き込み可能な `DMO_MEDIA_TYPE` を指すこと。
     pub(crate) unsafe fn write_to(&self, dest: *mut DMO_MEDIA_TYPE) -> DmoResult<()> {
         if dest.is_null() {
             return Err(E_POINTER);
@@ -100,10 +94,8 @@ impl NegotiatedType {
     }
 }
 
-/// 入力側の「NV12ならなんでも」を表す部分型(format blockなし)。
-///
 /// # Safety
-/// `dest` は書き込み可能な DMO_MEDIA_TYPE を指すこと。
+/// `dest` は書き込み可能な `DMO_MEDIA_TYPE` を指すこと。
 pub(crate) unsafe fn write_partial_nv12(dest: *mut DMO_MEDIA_TYPE) -> DmoResult<()> {
     if dest.is_null() {
         return Err(E_POINTER);

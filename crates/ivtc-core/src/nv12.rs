@@ -1,14 +1,11 @@
-//! NV12(Y平面 + UVインターリーブ平面)のレイアウトとコピー。
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Nv12Layout {
-    /// 表示領域の幅(偶数)。
     pub width: u32,
-    /// 表示領域の高さ(偶数)。
+
     pub height: u32,
-    /// 1行のバイト数(Y平面もUV平面も同じ)。
+
     pub stride: u32,
-    /// Y平面の行数(パディング込み, >= height, 偶数)。UV平面はその直後に続く。
+
     pub plane_height: u32,
 }
 
@@ -64,28 +61,23 @@ impl Nv12Layout {
         })
     }
 
-    /// パディングなしのレイアウト。
     pub fn packed(width: u32, height: u32) -> Result<Self, LayoutError> {
         Self::new(width, height, width, height)
     }
 
-    /// 1フレームのバイト数(Y + UV)。
     pub fn frame_size(&self) -> usize {
         self.stride as usize * self.plane_height as usize * 3 / 2
     }
 
-    /// UV平面の先頭オフセット。
     pub fn uv_offset(&self) -> usize {
         self.stride as usize * self.plane_height as usize
     }
 
-    /// 表示領域のサイズが一致するか(ストライドは問わない)。
     pub fn same_picture(&self, other: &Self) -> bool {
         self.width == other.width && self.height == other.height
     }
 }
 
-/// `src` から `dst` へ表示領域をコピーする。ストライドが違っても変換する。
 pub fn copy_frame(
     src: &[u8],
     src_layout: &Nv12Layout,
@@ -157,7 +149,7 @@ mod tests {
     fn converts_stride_for_both_planes() {
         let s = Nv12Layout::packed(4, 2).unwrap();
         let d = Nv12Layout::new(4, 2, 6, 2).unwrap();
-        // Y: 2行, UV: 1行
+
         let src = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
         let mut dst = vec![0xEEu8; d.frame_size()];
         copy_frame(&src, &s, &mut dst, &d).unwrap();

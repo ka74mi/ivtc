@@ -1,14 +1,3 @@
-//! 集約(aggregation)対応の IMediaObject 実装。
-//!
-//! DMO Wrapper Filter はDMOを自分(外側)に集約して生成するため、DMOは
-//! 「非委譲IUnknown」と「委譲IUnknown(IMediaObjectのIUnknown部)」の2つを持つ必要がある。
-//! windows-rs の `#[implement]` は集約に対応していないので、ここだけ手書きしている。
-//!
-//! 方針:
-//! - vtableの各関数は生のHRESULTを返す(S_FALSEを正確に返すため。`Result<()>`だと潰れる)。
-//! - 各呼び出しは `run()` を通る: 入口/出口のトレース、Mutex、panic捕捉(FFI越えのpanicを防ぐ)。
-//! - 処理本体は `Processor`。ここはポインタ変換とCOMのお作法だけ。
-
 use core::ffi::c_void;
 use core::mem::offset_of;
 use core::panic::AssertUnwindSafe;
@@ -48,19 +37,16 @@ struct InnerUnknownSlot {
 
 #[repr(C)]
 struct DmoObject {
-    /// 先頭に置くこと: IMediaObjectのインターフェースポインタ == オブジェクト先頭。
     media_object: MediaObjectSlot,
-    /// 非委譲IUnknown。
+
     inner_unknown: InnerUnknownSlot,
-    /// 非委譲の参照カウント(外側がいない場合は全体の参照カウントを兼ねる)。
+
     refs: AtomicU32,
-    /// 外側のIUnknown(借用。AddRefしない: 外側が内側を所有するので循環になる)。
+
     outer: *mut c_void,
     processor: Mutex<Processor>,
     _module: ModuleRef,
 }
-
-// ---- ポインタ変換 ------------------------------------------------------
 
 fn media_object_ptr(obj: *mut DmoObject) -> *mut c_void {
     obj.cast()
@@ -90,8 +76,6 @@ unsafe fn outer_vtbl<'a>(outer: *mut c_void) -> &'a IUnknown_Vtbl {
     unsafe { &**outer.cast::<*const IUnknown_Vtbl>() }
 }
 
-// ---- 参照カウントとQueryInterface ----------------------------------------
-
 unsafe fn release_own(obj: *mut DmoObject) -> u32 {
     let remaining = unsafe { (*obj).refs.fetch_sub(1, Ordering::Release) } - 1;
     if remaining == 0 {
@@ -102,7 +86,6 @@ unsafe fn release_own(obj: *mut DmoObject) -> u32 {
     remaining
 }
 
-/// インターフェース(IMediaObject)側のAddRef: 外側がいれば外側へ委譲。
 unsafe fn controlling_add_ref(obj: *mut DmoObject) -> u32 {
     let outer = unsafe { (*obj).outer };
     if outer.is_null() {
@@ -146,7 +129,6 @@ unsafe fn inner_query(obj: *mut DmoObject, iid: *const GUID, out: *mut *mut c_vo
     }
 }
 
-// 非委譲IUnknown
 unsafe extern "system" fn inner_query_interface(
     this: *mut c_void,
     iid: *const GUID,
@@ -166,7 +148,6 @@ unsafe extern "system" fn inner_release(this: *mut c_void) -> u32 {
     unsafe { release_own(obj_from_inner_unknown(this)) }
 }
 
-// 委譲IUnknown(IMediaObjectのIUnknown部)
 unsafe extern "system" fn mo_query_interface(
     this: *mut c_void,
     iid: *const GUID,
@@ -193,12 +174,8 @@ static INNER_UNKNOWN_VTBL: IUnknown_Vtbl = IUnknown_Vtbl {
     Release: inner_release,
 };
 
-// ---- 生成 ----------------------------------------------------------------
-
-/// IClassFactory::CreateInstance の本体。
-///
 /// # Safety
-/// `riid` / `ppv` は有効なポインタ、`outer` は null か有効なIUnknown。
+/// `riid` と `ppv` は有効なポインタ、`outer` は null か有効な `IUnknown` を指すこと。
 pub(crate) unsafe fn create_instance(
     outer: *mut c_void,
     riid: *const GUID,
@@ -224,16 +201,13 @@ pub(crate) unsafe fn create_instance(
     }));
 
     if !outer.is_null() {
-        // 集約: 作成時の参照(非委譲IUnknown)をそのまま外側に渡す。
         unsafe { *ppv = inner_unknown_ptr(obj) };
         return S_OK;
     }
     let hr = unsafe { inner_query(obj, riid, ppv) };
-    unsafe { release_own(obj) }; // 作成時の参照を手放す
+    unsafe { release_own(obj) };
     hr
 }
-
-// ---- 呼び出し共通処理 ------------------------------------------------------
 
 fn run(
     this: *mut c_void,
@@ -275,8 +249,6 @@ fn write_u32(p: *mut u32, v: u32) -> DmoResult<()> {
     unsafe { *p = v };
     Ok(())
 }
-
-// ---- IMediaObject ----------------------------------------------------------
 
 unsafe extern "system" fn get_stream_count(
     this: *mut c_void,
@@ -337,7 +309,7 @@ unsafe extern "system" fn get_input_type(
             return Err(DMO_E_NO_MORE_ITEMS);
         }
         if pmt.is_null() {
-            return Ok(Status::Done); // 範囲チェックのみ
+            return Ok(Status::Done);
         }
         unsafe { write_partial_nv12(pmt) }?;
         Ok(Status::Done)
@@ -353,7 +325,7 @@ unsafe extern "system" fn get_output_type(
     run(this, "GetOutputType", |p| {
         check_stream(index)?;
         trace!("  type_index={type_index} pmt_null={}", pmt.is_null());
-        let preferred = p.preferred_output_type()?; // 入力タイプ未設定なら DMO_E_TYPE_NOT_SET
+        let preferred = p.preferred_output_type()?;
         if type_index != 0 {
             return Err(DMO_E_NO_MORE_ITEMS);
         }
@@ -613,14 +585,13 @@ unsafe extern "system" fn process_output(
             return Err(E_INVALIDARG);
         }
 
-        // DMOの規約: 出力はバッファの既存データの末尾から書き足す。
         let dst = unsafe { core::slice::from_raw_parts_mut(ptr.add(len as usize), need) };
         let Some(meta) = p.process_output(dst)? else {
             return Ok(Status::NoOutput);
         };
         unsafe { buffer.SetLength(len + need as u32) }.map_err(|e| e.code())?;
 
-        let mut st = DMO_OUTPUT_DATA_BUFFERF_SYNCPOINT.0 as u32; // NV12はすべてキーフレーム
+        let mut st = DMO_OUTPUT_DATA_BUFFERF_SYNCPOINT.0 as u32;
         if let Some(t) = meta.time {
             st |= DMO_OUTPUT_DATA_BUFFERF_TIME.0 as u32;
             slot.rtTimestamp = t;
@@ -641,7 +612,6 @@ unsafe extern "system" fn process_output(
     })
 }
 
-/// 呼び出し側(wrapper)が直列化するため、ここでは何もしない。
 unsafe extern "system" fn lock(this: *mut c_void, _lock: i32) -> HRESULT {
     run(this, "Lock", |_| Ok(Status::Done))
 }

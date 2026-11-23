@@ -1,11 +1,3 @@
-//! パススルー処理の中核(COM/Windows非依存)。
-//!
-//! - フレームは「入力時のレイアウト」と一緒にキューへ積む。出力時にそのレイアウトから
-//!   現在の出力レイアウトへ変換コピーするので、入力/出力の型(stride)が途中で変わっても
-//!   キュー内のフレームを捨てる必要がない。
-//! - 出力型の設定はキューに触らない。(DMO Wrapperは出力型を頻繁に再設定してくる)
-//! - 入力の表示サイズが変わったときだけ、出力型を無効化してキューを捨てる。
-
 use crate::delay_queue::DelayQueue;
 use crate::nv12::{Nv12Layout, copy_frame};
 
@@ -19,7 +11,7 @@ pub struct SampleMeta {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutputMeta {
     pub sample: SampleMeta,
-    /// まだ出力できるフレームが残っている。
+
     pub more: bool,
 }
 
@@ -72,7 +64,6 @@ impl Passthrough {
         self.queue.len()
     }
 
-    /// (入力数, 出力数, 破棄数)
     pub fn counters(&self) -> (u64, u64, u64) {
         (self.frames_in, self.frames_out, self.frames_dropped)
     }
@@ -85,10 +76,6 @@ impl Passthrough {
         self.output.as_ref()
     }
 
-    // ---- 型 ------------------------------------------------------------
-
-    /// 入力レイアウトを設定する。出力型を無効化した(=呼び出し側も出力型を捨てるべき)ときtrue。
-    /// 表示サイズが変わらない限りキューは捨てない。
     pub fn set_input_layout(&mut self, layout: Nv12Layout) -> bool {
         let picture_changed = self
             .input
@@ -115,7 +102,6 @@ impl Passthrough {
         self.output = None;
     }
 
-    /// 出力レイアウトとして受け入れ可能か(設定はしない)。
     pub fn check_output_layout(&self, layout: &Nv12Layout) -> Result<(), PassError> {
         let input = self.input.as_ref().ok_or(PassError::TypeNotSet)?;
         if input.same_picture(layout) {
@@ -125,7 +111,6 @@ impl Passthrough {
         }
     }
 
-    /// 出力レイアウトを設定する。キューには触らない。
     pub fn set_output_layout(&mut self, layout: Nv12Layout) -> Result<(), PassError> {
         self.check_output_layout(&layout)?;
         self.output = Some(layout);
@@ -143,8 +128,6 @@ impl Passthrough {
         }
     }
 
-    // ---- ストリーミング --------------------------------------------------
-
     pub fn accepts_input(&self) -> Result<bool, PassError> {
         self.both()?;
         Ok(self.queue.accepts_input())
@@ -158,7 +141,6 @@ impl Passthrough {
         Ok(self.both()?.1.frame_size())
     }
 
-    /// 入力を1枚受ける。戻り値は「いま出力できるフレームがあるか」。
     pub fn push(&mut self, data: &[u8], meta: SampleMeta) -> Result<bool, PassError> {
         let (input, _) = self.both()?;
         let layout = *input;
@@ -188,7 +170,6 @@ impl Passthrough {
         Ok(self.queue.has_ready())
     }
 
-    /// 出力できるフレームを1枚 `dst` に書く。`dst` はちょうど出力フレーム分の長さ以上。
     pub fn pop_into(&mut self, dst: &mut [u8]) -> Result<Option<OutputMeta>, PassError> {
         let output = *self.both()?.1;
         if !self.queue.has_ready() {
@@ -213,7 +194,6 @@ impl Passthrough {
         Ok(Some(out))
     }
 
-    /// 出力バッファが無いときに1枚捨てる。
     pub fn discard_ready(&mut self) {
         if let Some(frame) = self.queue.pop_ready() {
             self.frames_dropped += 1;
@@ -221,14 +201,12 @@ impl Passthrough {
         }
     }
 
-    /// EOS/不連続: 残りをすべて吐き出せる状態にする。
     pub fn begin_drain(&mut self) -> Result<(), PassError> {
         self.both()?;
         self.queue.begin_drain();
         Ok(())
     }
 
-    /// シーク等: 保持中のフレームを捨てる。捨てた枚数を返す。
     pub fn flush(&mut self) -> usize {
         self.discard_queued()
     }
@@ -282,8 +260,6 @@ mod tests {
         p
     }
 
-    /// 回帰テスト: DMO Wrapper は入力直後に出力型を(同じ型でも)再設定してくる。
-    /// これでキューが空になってはいけない。
     #[test]
     fn resetting_output_layout_keeps_queued_frames() {
         let (i, o) = (layout(4), layout(6));
@@ -319,7 +295,6 @@ mod tests {
         let mut p = ready(1, a, o);
         p.push(&frame(1, &a), meta(1)).unwrap();
 
-        // 同じ表示サイズでstrideだけ変わる: 出力型もキューも維持される
         assert!(!p.set_input_layout(b));
         p.push(&frame(2, &b), meta(2)).unwrap();
 

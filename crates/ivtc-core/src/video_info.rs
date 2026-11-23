@@ -1,9 +1,5 @@
-//! VIDEOINFOHEADER / VIDEOINFOHEADER2 のバイト列(DirectShowのformat block)の解析。
-//! Windows APIは使わず、リトルエンディアンのオフセットで読む。
-
 use crate::nv12::{LayoutError, Nv12Layout};
 
-/// BITMAPINFOHEADER.biCompression の 'NV12'。
 pub const BI_NV12: u32 = 0x3231_564E;
 pub const VIDEOINFOHEADER_SIZE: usize = 88;
 pub const VIDEOINFOHEADER2_SIZE: usize = 112;
@@ -46,9 +42,9 @@ pub enum VideoInfoError {
 pub struct VideoInfo {
     pub kind: VideoInfoKind,
     pub layout: Nv12Layout,
-    /// 100ns単位。0なら不明。
+
     pub avg_time_per_frame: i64,
-    /// VIDEOINFOHEADER2.dwInterlaceFlags(V1では0)。
+
     pub interlace_flags: u32,
 }
 
@@ -80,8 +76,6 @@ impl VideoInfo {
             return Err(VideoInfoError::BadBitmapHeader);
         }
 
-        // YUVでは biWidth がストライド(ピクセル=バイト)、|biHeight| がY平面の行数。
-        // 実際の表示領域は rcSource があればそれを使う(原点オフセットは無視)。
         let stride = bi_width as u32;
         let plane_height = bi_height.unsigned_abs();
         let rc_w = i32_at(bytes, OFF_RC_SOURCE + 8) - i32_at(bytes, OFF_RC_SOURCE);
