@@ -1,6 +1,7 @@
 /target/
 .vs/
 *.log
+*.patch
 **/*.pdb
 **/*.ilk
 **/*.exp
