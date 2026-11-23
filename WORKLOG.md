@@ -32,9 +32,9 @@
 
 ## 6. 次のステップ
 1. GitHub Actions の CI を実装する。まずは `rustfmt`、`check`、`clippy`、`test` の4点で、もし公式 GitHub Actions を利用する場合は `actions-lockfile` を利用する。バージョン更新には Renovate を利用する。簡易的なrenovate.jsonテンプレートは作成済み。
-1. `PLAYBACK_IVTC_DELAY` を有効にした遅延パススルーで、シーク時の挙動、EOS時の吐き出し、音ズレの有無を確認する(`Flush`、`Discontinuity`、ドレイン処理の検証が目的)。
-2. 遅延パススルーの検証に合格した後、IVTC本体(縞検出 → ケイデンス状態機械 → Weave)を `ivtc-core` へ段階的に移植する。
-3. `ivtc-cli` を実装し、VapourSynth版との数値比較を行う。
+2. `PLAYBACK_IVTC_DELAY` を有効にした遅延パススルーで、シーク時の挙動、EOS時の吐き出し、音ズレの有無を確認する(`Flush`、`Discontinuity`、ドレイン処理の検証が目的)。
+3. 遅延パススルーの検証に合格した後、IVTCロジックの実装についてVapourSynth版の既知の問題点を洗い出し、改善できる箇所がないか複数の論文などを元に再考する。
+4. 再度まとめ直したあと、実装に取り掛かる。
 
 ## 7. 移植元(VapourSynth版)の要点
 - 出力フレーム `n` を生成するごとに、`n-2` から `n+lookahead`(5、10、15のいずれか)までのフレーム窓を要求する。
@@ -43,7 +43,13 @@
 - ケイデンス状態機械は `PPPII` パターンを扱う。P位置の縞スコアは `-3` 倍、I位置は `+1` 倍としてロック判定を行い、ミスマッチの蓄積でアンロックする。
 - Weave処理: `currentPhase==3` かつ `maxBlock > blockIThreshold/4` のとき、`FutureP1` の片フィールドを上書きする。出力フレームレートは `24000/1001` とする。
 - 既知の整理ポイント: `lockThreshold`、`kernelSize`、`EvenLocked` は未使用。`computeIntraFramePcc` は常時計算されている。Weaveの `copyframe` に二重処理がある。
-
+- 既知のVapourSynth版の問題点は以下の通り。
+  - プレイヤーを終了させた時、先読み関連の影響か必ずメモリ関連のエラーを吐く。
+  - 最適な縞検出閾値の未解決。解像度によっても最適な値が変わってしまう。
+  - 通常本編中のケイデンスはCMを除き一定だが、イレギュラーなソースでは、本編 → OP、本編 → EDのシーンチェンジでもケイデンスが変わるものがある。
+  この場合、シーンチェンジ後1サイクルほど奇妙なケイデンス周期が見られ、間引きに失敗する。
+  詳細は `docs/scene-change-cadence-instability.md` に記している。
+  
 ## 8. MPC-HC・DMOの知見
 - [確定] MPC-HCはDMOを特別扱いせず、外部フィルターとしてモニカまたはCLSID経由で生成する。DMOは `DMOCATEGORY_VIDEO_EFFECT` の列挙対象となり、DMO Wrapper経由でNV12のみを受け取るため、LAV Videoの出力側に接続される。
 - [確定] DMO Wrapperが扱うピン構成は1入力・複数出力まで。`ProcessOutput` はデータ到着時(EOSを含む)のみ呼ばれる。`S_FALSE` は「出力なし」を意味するため、`.ok()` 等でエラーや成功扱いと混同して潰さないよう注意する。
