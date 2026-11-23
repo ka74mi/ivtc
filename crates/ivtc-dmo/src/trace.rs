@@ -1,15 +1,3 @@
-//! 軽量トレース。フリーズ調査用に「入った/出た」を1行ずつ即時に書き出す。
-//!
-//! 出力先の指定(上から順に最初に見つかったものを使う):
-//! 1. 環境変数 `PLAYBACK_IVTC_TRACE`(対象プロセス起動前に設定が必要)
-//! 2. レジストリ `HKLM\SOFTWARE\PlaybackIVTC` の文字列値 `Trace`
-//!    (MPC-HCなどエクスプローラーから起動するアプリ向け。`cargo xtask trace-on` で設定)
-//!
-//! 値の意味:
-//! - `debug`      : OutputDebugString(DebugView / Visual Studio の出力ウィンドウ)
-//! - それ以外     : そのパスのファイルへ追記(親フォルダは自動作成。1行ごとに書き込み)
-//! - 未設定       : 何もしない(ほぼコストなし)
-
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::Write;

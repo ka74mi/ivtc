@@ -1,11 +1,3 @@
-//! `cargo xtask <command>` — ビルド・登録・検査をまとめたタスクランナー。
-//!
-//!   cargo xtask build [--release]       DLLをビルド
-//!   cargo xtask register [--release]    ビルドして regsvr32 で登録(管理者権限のシェルで)
-//!   cargo xtask unregister [--release]  登録解除
-//!   cargo xtask reinstall [--release]   解除 → ビルド → 登録
-//!   cargo xtask check                   fmt --check / clippy / test
-
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
@@ -21,7 +13,6 @@ fn main() -> ExitCode {
         "register" => build(release).and_then(|dll| regsvr32(&dll, false)),
         "unregister" => regsvr32(&dll_path(release), true),
         "reinstall" => {
-            // 解除は未登録でも失敗しうるので結果を無視する。
             let _ = regsvr32(&dll_path(release), true);
             build(release).and_then(|dll| regsvr32(&dll, false))
         }
@@ -111,8 +102,6 @@ fn check() -> Result<(), String> {
 
 const TRACE_KEY: &str = r"HKLM\SOFTWARE\PlaybackIVTC";
 
-/// レジストリにトレース出力先を設定する(環境変数が使えないMPC-HC等向け)。管理者権限が必要。
-/// 引数なしなら `%PUBLIC%\PlaybackIVTC\trace.log`。`debug` を渡すとOutputDebugString。
 fn trace_on(target: Option<&str>) -> Result<(), String> {
     let default = std::env::var("PUBLIC")
         .map(|p| format!(r"{p}\PlaybackIVTC\trace.log"))

@@ -1,7 +1,3 @@
-//! DMOの処理本体(COMポインタを扱わない層)。
-//! 型(DMO_MEDIA_TYPE)の保持とHRESULTへの変換を担当し、実際のフレーム処理は
-//! `ivtc_core::passthrough::Passthrough` に任せる。IVTC本体もここ(とivtc-core)に入れていく。
-
 use ivtc_core::passthrough::{PassError, Passthrough, SampleMeta};
 use windows::Win32::Foundation::{E_FAIL, E_INVALIDARG};
 use windows::Win32::Media::DxMediaObjects::{
@@ -15,7 +11,6 @@ use crate::media_type::NegotiatedType;
 
 pub(crate) type DmoResult<T> = Result<T, HRESULT>;
 
-/// 成功コードの区別: S_OK / S_FALSE(出力なし)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Status {
     Done,
@@ -26,7 +21,7 @@ pub(crate) struct OutputMeta {
     pub(crate) time: Option<i64>,
     pub(crate) length: Option<i64>,
     pub(crate) discontinuity: bool,
-    /// まだ出力できるフレームが残っている(DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE)。
+
     pub(crate) more: bool,
 }
 
@@ -51,8 +46,6 @@ pub(crate) struct Processor {
 
 impl Processor {
     pub(crate) fn new() -> Self {
-        // デバッグ用: PLAYBACK_IVTC_DELAY=N で N フレーム遅延のパススルーにする
-        // (先読み/EOS吐き出し/Flushの検証用)。
         let delay = std::env::var("PLAYBACK_IVTC_DELAY")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
@@ -65,8 +58,6 @@ impl Processor {
         }
     }
 
-    // ---- 型 ------------------------------------------------------------
-
     pub(crate) fn input_type(&self) -> DmoResult<&NegotiatedType> {
         self.input.as_ref().ok_or(DMO_E_TYPE_NOT_SET)
     }
@@ -75,8 +66,6 @@ impl Processor {
         self.output.as_ref().ok_or(DMO_E_TYPE_NOT_SET)
     }
 
-    /// GetOutputType(0) で返す型。設定済みならその現在の型、なければ入力と同じ型。
-    /// (常に入力型を返すと、下流が別のstrideを選んだ場合にWrapperが毎フレーム再設定してくる)
     pub(crate) fn preferred_output_type(&self) -> DmoResult<&NegotiatedType> {
         self.output
             .as_ref()
@@ -109,7 +98,7 @@ impl Processor {
                 .check_output_layout(&new.info.layout)
                 .map_err(map_err);
         }
-        // キューには触らない(Wrapperは出力型を頻繁に再設定する)。
+
         self.core
             .set_output_layout(new.info.layout)
             .map_err(map_err)?;
@@ -127,8 +116,6 @@ impl Processor {
         self.core.clear_output();
         self.output = None;
     }
-
-    // ---- ストリーミング --------------------------------------------------
 
     pub(crate) fn input_status_accepts_data(&self) -> DmoResult<bool> {
         self.core.accepts_input().map_err(map_err)
@@ -176,12 +163,10 @@ impl Processor {
         })
     }
 
-    /// 出力フレーム1枚ぶんのバイト数。
     pub(crate) fn output_frame_size(&self) -> DmoResult<usize> {
         self.core.output_frame_size().map_err(map_err)
     }
 
-    /// 出力できるフレームを1枚 `dst`(output_frame_size バイト以上)に書く。
     pub(crate) fn process_output(&mut self, dst: &mut [u8]) -> DmoResult<Option<OutputMeta>> {
         let out = self.core.pop_into(dst).map_err(map_err)?;
         Ok(out.map(|o| OutputMeta {
@@ -192,7 +177,6 @@ impl Processor {
         }))
     }
 
-    /// 出力バッファが渡されなかった(DISCARD_WHEN_NO_BUFFER)ときに1枚捨てる。
     pub(crate) fn discard_ready(&mut self) {
         self.core.discard_ready();
     }

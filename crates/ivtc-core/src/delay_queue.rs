@@ -1,13 +1,3 @@
-//! N枚の先読み(遅延)を持つフレームキュー。
-//!
-//! DMOの規約: ストリーミング中は「入力を受け付ける」か「出力を出せる」の
-//! どちらか(または両方)が常に成り立たなければならない。
-//! - `accepts_input()`: 入力を受けられる(保持数が delay 以下で、吐き出し中でない)
-//! - `has_ready()`   : 出力できる(保持数が delay を超えた、または吐き出し中で空でない)
-//!
-//! EOS(Discontinuity)では `begin_drain()` で残りをすべて吐き出す。
-//! 吐き出しが終わる(空になる)と自動で通常状態に戻る。
-
 use std::collections::VecDeque;
 
 #[derive(Debug)]
@@ -50,7 +40,6 @@ impl<T> DelayQueue<T> {
         self.items.len() > self.delay || (self.draining && !self.items.is_empty())
     }
 
-    /// 呼び出し側は先に `accepts_input()` を確認すること。
     pub fn push(&mut self, item: T) {
         self.items.push_back(item);
     }
@@ -66,12 +55,10 @@ impl<T> DelayQueue<T> {
         item
     }
 
-    /// EOS/不連続: 残りをすべて出力できる状態にする。
     pub fn begin_drain(&mut self) {
         self.draining = !self.items.is_empty();
     }
 
-    /// シークなど: 保持しているフレームを捨てる。
     pub fn clear(&mut self) -> Vec<T> {
         self.draining = false;
         self.items.drain(..).collect()

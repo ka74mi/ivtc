@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static LIVE_OBJECTS: AtomicUsize = AtomicUsize::new(0);
 static SERVER_LOCKS: AtomicUsize = AtomicUsize::new(0);
 
-/// 生きているCOMオブジェクトの数をDLLアンロード判定のために数える。
 pub(crate) struct ModuleRef;
 
 impl ModuleRef {
@@ -24,7 +23,7 @@ pub(crate) fn lock_server(lock: bool) {
         SERVER_LOCKS.fetch_add(1, Ordering::SeqCst);
         return;
     }
-    // 対応するロックが無いUnlockでアンダーフローしないよう、0未満にはしない。
+
     let mut current = SERVER_LOCKS.load(Ordering::SeqCst);
     while current > 0 {
         match SERVER_LOCKS.compare_exchange_weak(

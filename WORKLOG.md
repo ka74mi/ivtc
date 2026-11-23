@@ -10,7 +10,7 @@
 ## 2. 環境
 - 実行環境: Windows、sudo が利用できる PowerShell。Rust は stable 1.100.0 (x86_64-pc-windows-msvc)。
 - 開発ディレクトリ: `C:\Users\ka74mi\workspace\ivtc`
-- ビルド・テスト制約: Linux 上の作業サンドボックスでは `cargo check`、`cargo clippy`、`cargo test`、`cargo rustfmt` のみ実行可能。**Windows 実機での動作確認はすべてユーザー環境に依存する。**
+- ビルド・テスト制約: Linux上の作業サンドボックスで `cargo check`、`cargo clippy`、`cargo test`、`cargo fmt` を実行できるのは `ivtc-core` と `xtask` のみ。`ivtc-dmo` は windows-core がLinuxでコンパイルできないため、ビルドもテストもWindows環境(実機またはWindowsのCI)でのみ確認できる。**Windows実機での動作確認はすべてユーザー環境に依存する。**
 - 最新の修正版は `https://github.com/ka74mi/ivtc` を clone して取得する。
 
 ## 3. 構成 (ワークスペース)
@@ -55,3 +55,15 @@
 - [確定] DMO Wrapper が扱うピン構成は 1 入力・複数出力まで。`ProcessOutput` はデータ到着時 (EOS を含む) のみ呼ばれる。`S_FALSE` は「出力なし」を意味するため、`.ok()` 等でエラーや成功扱いと混同して潰さないよう注意する。
 - [確定] EVR は `QueryAccept` を使って `stride` を選択する (本件では `2048` が選ばれた)。
 - 参照資料: DMO Wrapper Filter (learn.microsoft.com/en-us/windows/win32/directshow/dmo-wrapper-filter)、IMediaObject::ProcessOutput (MSDN ms785950)。
+
+## 8. 実装メモ(ソースコメント削除に伴う引き継ぎ)
+[確定] `Passthrough` はフレームを入力時のレイアウトと一緒にキューへ積み、出力時に現在の出力レイアウトへstride変換コピーする。出力型の設定ではキューに触らない(DMO Wrapperは入力直後に、同じ型でも出力型を再設定してくるため)。入力の表示サイズが変わったときだけ、出力型を無効化してキューを捨てる。回帰テストは `resetting_output_layout_keeps_queued_frames`。
+[確定] `DelayQueue` は、ストリーミング中に「入力を受け付ける」か「出力を出せる」のどちらかが常に成り立つようにする(DMOの規約)。EOS(Discontinuity)で `begin_drain` し、空になると通常状態に戻る。`Flush` は保持フレームを捨てる。
+[確定] `IMediaObject` は手書き実装にしている。DMO Wrapper Filter はDMOを自分(外側)に集約して生成するため、非委譲 `IUnknown` と委譲 `IUnknown` の2つが必要で、windows-rs の `#[implement]` は集約に対応していない。vtableの関数は生の `HRESULT` を返す(`Result<()>` だと `S_FALSE` が潰れるため)。各呼び出しは `run()` を通り、入口/出口のトレース、Mutex、panic捕捉(FFIをまたぐpanicの防止)を行う。
+[未確認] `ProcessOutput` は出力バッファの既存データの末尾に書き足す(DMOの規約。公式ドキュメントとの照合は未実施)。出力には常に `SYNCPOINT` を付ける(NV12は全フレームがキーフレーム)。
+[未確認] `DMORegister` にNV12の入出力タイプを渡しているのは、`IFilterMapper2` やMPC-HCが「NV12を受けてNV12を出すフィルター」として見つけるため(公式ドキュメントとの照合は未実施)。登録は `HKCR` に書くため管理者権限が必要。
+[確定] CLSID `{D4B4B989-6B2A-4D0C-8C47-5D3F5CA5A7A1}` は登録後に変更しない。
+[確定] `PLAYBACK_IVTC_DELAY` の上限は32フレーム(`DELAY_MAX`)。
+[確定] format block の解析では、YUVの場合 `biWidth` がストライド、`|biHeight|` がY平面の行数になる。表示領域は `rcSource` があればそれを使う(原点オフセットは無視)。UV平面はY平面(パディング込みの `plane_height` 行)の直後に続く。
+[確定] `windows` と `windows-core` は `=0.62.2` に固定している。windows-rs はマイナー更新でAPIが動くことがあるため、上げるときは `cargo xtask check` が通ることを確認する。`windows-core` を直接依存にしているのは、`#[implement]` の展開結果が `windows_core::` を直接参照するため。
+[確定] `.cargo/config.toml` で `crt-static` を指定している。他プロセス(MPC-HC、GraphStudioNext)にロードされるDLLなので、VC++ランタイムの再頒布パッケージに依存させないため。

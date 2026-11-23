@@ -1,7 +1,3 @@
-//! regsvr32 から呼ばれる登録/解除。
-//! COMクラス(HKCR\CLSID\{...}\InprocServer32)と、DMOとしての登録(DMORegister)を行う。
-//! HKCR(HKLM側)に書くので、regsvr32 は管理者権限で実行すること。
-
 use std::panic::catch_unwind;
 
 use windows::Win32::Foundation::{E_FAIL, GetLastError, HMODULE, S_OK};
@@ -30,7 +26,6 @@ fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
 
-/// `{D4B4B989-6B2A-4D0C-8C47-5D3F5CA5A7A1}` 形式(大文字)。
 fn guid_braced(g: &GUID) -> String {
     format!(
         "{{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
@@ -54,7 +49,7 @@ fn clsid_key() -> String {
 
 fn write_string(key: HKEY, name: &str, value: &[u16]) -> Result<(), HRESULT> {
     let name = wide(name);
-    // REG_SZ のバイト長は終端NULを含める。
+
     let bytes = unsafe { std::slice::from_raw_parts(value.as_ptr().cast::<u8>(), value.len() * 2) };
     let status = unsafe { RegSetValueExW(key, PCWSTR(name.as_ptr()), None, REG_SZ, Some(bytes)) };
     if status.is_err() {
@@ -149,8 +144,7 @@ fn register_dmo() -> Result<(), HRESULT> {
     register_com_class()?;
 
     let name = wide(FRIENDLY_NAME);
-    // 入出力タイプを登録しておく: グラフ構築側(IFilterMapper2 / MPC-HC)が
-    // 「NV12を受けてNV12を出すフィルター」として見つけるために必要。
+
     let result = unsafe {
         DMORegister(
             PCWSTR(name.as_ptr()),
@@ -172,7 +166,7 @@ fn register_dmo() -> Result<(), HRESULT> {
 
 fn unregister_dmo() -> Result<(), HRESULT> {
     let dmo = unsafe { DMOUnregister(&CLSID_PLAYBACK_IVTC_DMO, &DMOCATEGORY_VIDEO_EFFECT) };
-    // DMO登録が既に無くてもCOM側の掃除は試みる。
+
     let com = remove_com_class();
     dmo.map_err(|e| e.code())?;
     com
