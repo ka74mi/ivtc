@@ -3,7 +3,6 @@
   "extends": ["config:recommended"],
   "timezone": "Asia/Tokyo",
   "schedule": ["* 0-5 * * 1"],
-  "minimumReleaseAge": "7 days",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "minimumReleaseAge": null,
@@ -14,12 +13,21 @@
   "lockFileMaintenance": {
     "enabled": true
   },
+  "constraints": {
+    "ghActionsLock": "v0.5.1"
+  },
   "customManagers": [
     {
       "customType": "regex",
-      "description": "CI で使う gh-actions-lock（GitHub CLI 拡張）のバージョン",
-      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
-      "matchStrings": ["GH_ACTIONS_LOCK_VERSION:\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "description": "gh-actions-lock (GitHub CLI 拡張)のバージョン。CI の GH_ACTIONS_LOCK_VERSION と constraints.ghActionsLock を同時に更新する",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/",
+        "/^renovate\\.json$/"
+      ],
+      "matchStrings": [
+        "GH_ACTIONS_LOCK_VERSION:\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)",
+        "\"ghActionsLock\":\\s*\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\""
+      ],
       "depNameTemplate": "github/gh-actions-lock",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
