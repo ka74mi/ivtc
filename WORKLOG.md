@@ -31,10 +31,9 @@
 - [確定] シーク時は別スレッド (スレッド 2) から `Flush` が 2 回呼ばれ、1 回目の呼び出しでキュー内の 1 フレームを破棄する (正常動作)。その直後にストリーミング スレッド側の `ProcessOutput` が `0x00000001` を返すが、これは割り込みによるもので無害。その後、シーク先からのフレームが正常に流れる。
 
 ## 5. 次のステップ
-1. GitHub Actions の CI を実装する。まずは `rustfmt`、`check`、`clippy`、`test` の 4 点で、公式 GitHub Actions を利用する場合は、`gh actions-lock` (拡張は `github/gh-actions-lock`) で `.github/workflows/actions.lock` を生成し、CI では `gh actions-lock --verify` で検証する。バージョン更新には Renovate を利用する。簡易的な `renovate.json` テンプレートは作成済み。
-2. `PLAYBACK_IVTC_DELAY` を有効にした遅延パススルーで、シーク時の挙動、EOS 時の吐き出し、音ズレの有無を確認する (`Flush`、`Discontinuity`、ドレイン処理の検証が目的)。
-3. 遅延パススルーの検証に合格した後、IVTC ロジックの実装について VapourSynth 版の既知の問題点を洗い出し、改善できる箇所がないか複数の論文などを元に再考する。
-4. 再度まとめ直した後、実装に取り掛かる。
+1. `PLAYBACK_IVTC_DELAY` を有効にした遅延パススルーで、シーク時の挙動、EOS 時の吐き出し、音ズレの有無を確認する (`Flush`、`Discontinuity`、ドレイン処理の検証が目的)。
+2. 遅延パススルーの検証に合格した後、IVTC ロジックの実装について VapourSynth 版の既知の問題点を洗い出し、改善できる箇所がないか複数の論文などを元に再考する。
+3. 再度まとめ直した後、実装に取り掛かる。
 
 ## 6. 移植元 (VapourSynth 版) の要点
 - 出力フレーム `n` を生成するごとに、`n-2` から `n+lookahead` (5、10、15 のいずれか) までのフレーム窓を要求する。
@@ -57,13 +56,17 @@
 - 参照資料: DMO Wrapper Filter (learn.microsoft.com/en-us/windows/win32/directshow/dmo-wrapper-filter)、IMediaObject::ProcessOutput (MSDN ms785950)。
 
 ## 8. 実装メモ(ソースコメント削除に伴う引き継ぎ)
-[確定] `Passthrough` はフレームを入力時のレイアウトと一緒にキューへ積み、出力時に現在の出力レイアウトへstride変換コピーする。出力型の設定ではキューに触らない(DMO Wrapperは入力直後に、同じ型でも出力型を再設定してくるため)。入力の表示サイズが変わったときだけ、出力型を無効化してキューを捨てる。回帰テストは `resetting_output_layout_keeps_queued_frames`。
-[確定] `DelayQueue` は、ストリーミング中に「入力を受け付ける」か「出力を出せる」のどちらかが常に成り立つようにする(DMOの規約)。EOS(Discontinuity)で `begin_drain` し、空になると通常状態に戻る。`Flush` は保持フレームを捨てる。
-[確定] `IMediaObject` は手書き実装にしている。DMO Wrapper Filter はDMOを自分(外側)に集約して生成するため、非委譲 `IUnknown` と委譲 `IUnknown` の2つが必要で、windows-rs の `#[implement]` は集約に対応していない。vtableの関数は生の `HRESULT` を返す(`Result<()>` だと `S_FALSE` が潰れるため)。各呼び出しは `run()` を通り、入口/出口のトレース、Mutex、panic捕捉(FFIをまたぐpanicの防止)を行う。
-[未確認] `ProcessOutput` は出力バッファの既存データの末尾に書き足す(DMOの規約。公式ドキュメントとの照合は未実施)。出力には常に `SYNCPOINT` を付ける(NV12は全フレームがキーフレーム)。
-[未確認] `DMORegister` にNV12の入出力タイプを渡しているのは、`IFilterMapper2` やMPC-HCが「NV12を受けてNV12を出すフィルター」として見つけるため(公式ドキュメントとの照合は未実施)。登録は `HKCR` に書くため管理者権限が必要。
-[確定] CLSID `{D4B4B989-6B2A-4D0C-8C47-5D3F5CA5A7A1}` は登録後に変更しない。
-[確定] `PLAYBACK_IVTC_DELAY` の上限は32フレーム(`DELAY_MAX`)。
-[確定] format block の解析では、YUVの場合 `biWidth` がストライド、`|biHeight|` がY平面の行数になる。表示領域は `rcSource` があればそれを使う(原点オフセットは無視)。UV平面はY平面(パディング込みの `plane_height` 行)の直後に続く。
-[確定] `windows` と `windows-core` は `=0.62.2` に固定している。windows-rs はマイナー更新でAPIが動くことがあるため、上げるときは `cargo xtask check` が通ることを確認する。`windows-core` を直接依存にしているのは、`#[implement]` の展開結果が `windows_core::` を直接参照するため。
-[確定] `.cargo/config.toml` で `crt-static` を指定している。他プロセス(MPC-HC、GraphStudioNext)にロードされるDLLなので、VC++ランタイムの再頒布パッケージに依存させないため。
+- [確定] `Passthrough` はフレームを入力時のレイアウトと一緒にキューへ積み、出力時に現在の出力レイアウトへstride変換コピーする。出力型の設定ではキューに触らない(DMO Wrapperは入力直後に、同じ型でも出力型を再設定してくるため)。入力の表示サイズが変わったときだけ、出力型を無効化してキューを捨てる。回帰テストは `resetting_output_layout_keeps_queued_frames`。
+- [確定] `DelayQueue` は、ストリーミング中に「入力を受け付ける」か「出力を出せる」のどちらかが常に成り立つようにする(DMOの規約)。EOS(Discontinuity)で `begin_drain` し、空になると通常状態に戻る。`Flush` は保持フレームを捨てる。
+- [確定] `IMediaObject` は手書き実装にしている。DMO Wrapper Filter はDMOを自分(外側)に集約して生成するため、非委譲 `IUnknown` と委譲 `IUnknown` の2つが必要で、windows-rs の `#[implement]` は集約に対応していない。vtableの関数は生の `HRESULT` を返す(`Result<()>` だと `S_FALSE` が潰れるため)。各呼び出しは `run()` を通り、入口/出口のトレース、Mutex、panic捕捉(FFIをまたぐpanicの防止)を行う。
+- [未確認] `ProcessOutput` は出力バッファの既存データの末尾に書き足す(DMOの規約。公式ドキュメントとの照合は未実施)。出力には常に `SYNCPOINT` を付ける(NV12は全フレームがキーフレーム)。
+- [未確認] `DMORegister` にNV12の入出力タイプを渡しているのは、`IFilterMapper2` やMPC-HCが「NV12を受けてNV12を出すフィルター」として見つけるため(公式ドキュメントとの照合は未実施)。登録は `HKCR` に書くため管理者権限が必要。
+- [確定] CLSID `{D4B4B989-6B2A-4D0C-8C47-5D3F5CA5A7A1}` は登録後に変更しない。
+- [確定] `PLAYBACK_IVTC_DELAY` の上限は32フレーム(`DELAY_MAX`)。
+- [確定] format block の解析では、YUVの場合 `biWidth` がストライド、`|biHeight|` がY平面の行数になる。表示領域は `rcSource` があればそれを使う(原点オフセットは無視)。UV平面はY平面(パディング込みの `plane_height` 行)の直後に続く。
+- [確定] `windows` と `windows-core` は `=0.62.2` に固定している。windows-rs はマイナー更新でAPIが動くことがあるため、上げるときは `cargo xtask check` が通ることを確認する。`windows-core` を直接依存にしているのは、`#[implement]` の展開結果が `windows_core::` を直接参照するため。
+- [確定] `.cargo/config.toml` で `crt-static` を指定している。他プロセス(MPC-HC、GraphStudioNext)にロードされるDLLなので、VC++ランタイムの再頒布パッケージに依存させないため。
+- [確定] CI は `.github/workflows/ci.yml` に定義している。Rust のジョブは、`ivtc-dmo` が Linux でビルドできないため `windows-latest` で `rustfmt`、`clippy`、`test` を実行する。`check` は `clippy` に含まれるため置かない。
+- [確定] `gh-actions-lock` は v0.5.1 に固定している。CI の `GH_ACTIONS_LOCK_VERSION` と `renovate.json` の `constraints.ghActionsLock` は同じ版に保ち、Renovate の customManager が同時に更新する。`gh actions-lock --verify` が通るよう、`.github/workflows/actions.lock` はコミットしておく。
+- [確定] `renovate.json` の `minimumReleaseAge` は、v0.5.1 の導入直後で 7 日に満たないため一時的に削除している。7 日を明らかに超えた時点でユーザーが元に戻す。それまで Renovate の自動 PR には触れない。
+- [未確認] runner にあらかじめ入っている stable が `rust-version = "1.100"` に届いているかは、初回の CI 実行で確認する。届いていなければ、`rustup toolchain install` の前後で更新手順を見直す。

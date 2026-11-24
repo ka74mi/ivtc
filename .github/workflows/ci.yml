@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust
+    # ivtc-dmo は windows クレートに依存し、Linux ではビルドできないため Windows で実行する。
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: ツールチェーンのインストール
+        # rust-toolchain.toml のチャンネルとコンポーネントを入れる (rustup 1.28 以降は自動で入らない)。
+        run: rustup toolchain install
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: test
+        run: cargo test --workspace --locked
+
+  lockfile:
+    name: Actions lockfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # --verify は GitHub の API で参照を確認するため、トークンが必要。
+      GH_TOKEN: ${{ github.token }}
+      # 拡張のバージョン。Renovate が更新を提案する (renovate.json の customManagers)。
+      GH_ACTIONS_LOCK_VERSION: v0.5.1
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: gh-actions-lock のインストール
+        run: gh extension install github/gh-actions-lock --pin "${GH_ACTIONS_LOCK_VERSION}"
+      - name: actions.lock の検証
+        run: gh actions-lock --verify
