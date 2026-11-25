@@ -9,3 +9,6 @@ mod media_type;
 mod module_state;
 mod processor;
 mod registration;
+
+#[cfg(test)]
+mod contract_tests;
