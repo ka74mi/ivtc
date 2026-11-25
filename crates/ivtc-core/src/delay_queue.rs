@@ -123,4 +123,40 @@ mod tests {
         assert_eq!(q.clear(), vec![1, 2]);
         assert!(q.is_empty() && q.accepts_input() && !q.has_ready());
     }
+
+    #[test]
+    fn exactly_one_of_accepting_or_ready_for_every_operation_sequence() {
+        const OPS: u32 = 4;
+        const LEN: u32 = 8;
+        for delay in 0..=3 {
+            for code in 0..OPS.pow(LEN) {
+                let mut q = DelayQueue::new(delay);
+                let mut rest = code;
+                let mut next = 0u32;
+                for step in 0..LEN {
+                    match rest % OPS {
+                        0 => {
+                            if q.accepts_input() {
+                                q.push(next);
+                                next += 1;
+                            }
+                        }
+                        1 => {
+                            q.pop_ready();
+                        }
+                        2 => q.begin_drain(),
+                        _ => {
+                            q.clear();
+                        }
+                    }
+                    rest /= OPS;
+                    assert_ne!(
+                        q.accepts_input(),
+                        q.has_ready(),
+                        "delay={delay} code={code} step={step}"
+                    );
+                }
+            }
+        }
+    }
 }
