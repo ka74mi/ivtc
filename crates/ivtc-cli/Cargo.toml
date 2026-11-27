@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-# ivtc-core はステージ2(解析ツール)で追加する
+ivtc-core.workspace = true
 
 [lints]
 workspace = true

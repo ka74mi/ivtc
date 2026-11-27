@@ -6,7 +6,7 @@
 ## 構成
 - `crates/ivtc-core` : DirectShow非依存のコア(NV12、format block解析、遅延キュー)。`cargo test` はどのOSでも通る
 - `crates/ivtc-dmo` : DMO本体(cdylib)。COM/IMediaObject/登録だけを持つ薄い層
-- `crates/ivtc-cli` : 解析用CLI(未実装)
+- `crates/ivtc-cli` : 解析用CLI(`dump`: フレームごとの特徴量を CSV で出力する。詳細は `docs/ivtc-cli-dump.md`)
 - `crates/xtask`    : `cargo xtask ...`
 
 ## 使い方(管理者権限のPowerShellで)
