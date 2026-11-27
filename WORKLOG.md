@@ -10,13 +10,13 @@
 ## 2. 環境
 - 実行環境: Windows、sudo が利用できる PowerShell。Rust は stable 1.100.0 (x86_64-pc-windows-msvc)。
 - 開発ディレクトリ: `C:\Users\ka74mi\workspace\ivtc`
-- ビルド・テスト制約: Linux上の作業サンドボックスで `cargo check`、`cargo clippy`、`cargo test`、`cargo fmt` を実行できるのは `ivtc-core` と `xtask` のみ。`ivtc-dmo` は windows-core がLinuxでコンパイルできないため、ビルドもテストもWindows環境(実機またはWindowsのCI)でのみ確認できる。**Windows実機での動作確認はすべてユーザー環境に依存する。**
+- ビルド・テスト制約: Linux上の作業サンドボックスで `cargo check`、`cargo clippy`、`cargo test`、`cargo fmt` を実行できるのは `ivtc-core`、`ivtc-cli`、`xtask` のみ。`ivtc-dmo` は windows-core がLinuxでコンパイルできないため、ビルドもテストもWindows環境(実機またはWindowsのCI)でのみ確認できる。**Windows実機での動作確認はすべてユーザー環境に依存する。**
 - 最新の修正版は `https://github.com/ka74mi/ivtc` を clone して取得する。
 
 ## 3. 構成 (ワークスペース)
-- `crates/ivtc-core`: 純 Rust、DirectShow 非依存のコア ライブラリ。`nv12`、`video_info`、`delay_queue`、`passthrough` を実装済みで、テスト 22 件に合格。
+- `crates/ivtc-core`: 純 Rust、DirectShow 非依存のコア ライブラリ。`nv12`、`video_info`、`delay_queue`、`passthrough`、`features` (縞量と差分の特徴量) を実装済み。
 - `crates/ivtc-dmo` (cdylib): COM の手書き実装 (`IMediaObject`)、レジストリ登録 (`DMORegister`、`VIDEO_EFFECT` カテゴリ、NV12 入出力)、トレース機能を含む DMO 本体。CLSID は `{D4B4B989-6B2A-4D0C-8C47-5D3F5CA5A7A1}`。
-- `crates/ivtc-cli`: 現在は空。ステージ 2 で VapourSynth 版との数値比較用に実装予定。
+- `crates/ivtc-cli`: 解析用 CLI。`dump` サブコマンドが NV12 の raw を標準入力から読み、フレームごとの特徴量を CSV で出力する。仕様は `docs/ivtc-cli-dump.md`。IVTC の判定は含まない。
 - `crates/xtask`: ビルド・登録・トレース制御用のタスク ランナー。サブコマンドは `build`、`register`、`unregister`、`reinstall`、`check`、`trace-on [path|debug]`、`trace-off`。
 - クレートとエディション: `windows` および `windows-core` は `=0.62.2` に固定し、Rust edition 2024 を使用。
 - 遅延パススルー設定: 環境変数 `PLAYBACK_IVTC_DELAY` (既定値 `0`) で遅延フレーム数を指定可能。
@@ -24,15 +24,16 @@
 
 ## 4. 現在進行中の作業
 - 目的: IVTC ロジックの設計を、実動画の解析結果を踏まえて確定する。
-- 対象: `docs/prior-art-survey.md` (先行研究の調査結果)、`docs/ivtc-design-options.md` (設計候補の比較と未決事項)。
-- 進捗: [確定] 論文・特許の調査と、設計候補の比較をドキュメントにまとめた。
+- 対象: `docs/prior-art-survey.md` (先行研究の調査結果)、`docs/ivtc-design-options.md` (設計候補の比較と未決事項)、`docs/ivtc-cli-dump.md` (特徴量ダンプの仕様)。
+- 進捗: [確定] 論文・特許の調査と設計候補の比較をドキュメントにまとめた。特徴量ダンプ用の `ivtc-cli dump` を実装した。
 - 未解決事項:
+  - [未確認] 実際の録画 TS での CSV が未取得。ffmpeg のデコードで得られるフレーム数が、MPC-HC (LAV Video) が DMO に渡すフレーム数と一致するかも未確認。
   - 位相推定の方式 (窓付きの系列推定、因果的な状態機械、併用) が未決。
   - 出力タイムスタンプの方式 (入力時刻の保持、24000/1001 への付け直し) が未決で、EVR での表示は [未確認]。
   - [報告] OP / ED の入りでケイデンスが変わるソースは稀で、サンプルが少ない。[仮説] 通常のソースを任意の位相でつなぐ疑似データで補う案がある。
 
 ## 5. 次のステップ
-1. 特徴量ダンプ用の `ivtc-cli` を実装する。完了の判断基準は、録画 TS からフレームごとの特徴量を CSV で出力でき、`docs/scene-change-cadence-instability.md` の P / I / D ラベルと突き合わせられること。
+1. 録画 TS の OP / ED 周辺 (`docs/scene-change-cadence-instability.md` の例を含む区間) と、通常の本編の区間から `ivtc-cli dump` で CSV を取得し、フレーム番号と P / I / D のラベルを添えて共有する。完了の判断基準は、`docs/ivtc-design-options.md` の「実動画で確かめたいこと」の 5 つの問いに数値で答えられること。
 2. 実動画の解析結果から設計を確定し、`docs/ivtc-design-options.md` に反映する。完了の判断基準は、未決事項 (位相推定の方式、出力タイムスタンプ、間引きの上限) に結論が出ていること。
 3. 確定した設計で `ivtc-core` に IVTC を実装する。
 
@@ -48,3 +49,5 @@
   - 論文、特許、TIVTC の調査結果と、別系統レポートとの照合。
 - `docs/ivtc-design-options.md`
   - 設計候補の比較、実動画で確かめたいこと、未決事項。
+- `docs/ivtc-cli-dump.md`
+  - `ivtc-cli dump` の使い方と CSV の列の定義。
